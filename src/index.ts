@@ -34,9 +34,17 @@ app.get("/", (req, res) => {
 
 const server = http.createServer(app);
 
-server.listen(port, () => {
-  serverDebug(`listening on port: ${port}`);
-});
+// HOST=127.0.0.1 keeps the relay behind a reverse proxy (the Irate-Box hub); unset, it
+// listens on every interface as before.
+const host = process.env.HOST;
+const onListening = () => {
+  serverDebug(`listening on ${host ?? "*"}:${port}`);
+};
+if (host) {
+  server.listen(Number(port), host, onListening);
+} else {
+  server.listen(port, onListening);
+}
 
 try {
   const io = new SocketIO(server, {
