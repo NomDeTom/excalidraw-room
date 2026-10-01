@@ -60,6 +60,25 @@ jobs:
             console.log("runtime dependencies:", Object.keys(dependencies).join(", "));'
           (cd bundle && yarn install --production --pure-lockfile --ignore-scripts --non-interactive)
           rm -rf bundle/node_modules/.bin bundle/yarn.lock
+      - name: Third-party notices
+        # THIRD-PARTY-NOTICES.txt in the bundle: what npm does not describe first, then every
+        # package installed under node_modules with its license text -- a superset of what the
+        # bundle contains, since bundlers also take from devDependencies.
+        run: |
+          out="bundle/THIRD-PARTY-NOTICES.txt"
+          {
+            cat <<NOTICE
+          excalidraw-room collaboration relay (MIT License), built for the Irate-Box hub from ${{ github.repository }} at ${{ github.sha }}.
+          Source: https://github.com/${{ github.repository }}/tree/${{ github.sha }}
+
+          NOTICE
+            cat <<'NOTICE'
+          The packages below are exactly the ones in this bundle's node_modules.
+
+          NOTICE
+            node .github/scripts/irate-box-notices.mjs bundle/node_modules
+          } > "$out"
+          du -h "$out"
       - name: Record what was built
         run: |
           cat > "bundle/irate-box-bundle.json" <<JSON
