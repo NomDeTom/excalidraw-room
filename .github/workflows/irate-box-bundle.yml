@@ -1,0 +1,63 @@
+name: Irate-Box app bundle (room)
+
+# Builds the excalidraw-room collaboration relay: dist/ plus its production dependencies, plain JS, run by Debian's nodejs on the hub (install.sh --with-collab) for the Irate-Box hub and uploads it as a run artifact,
+# irate-box-room-<commit>, which the hub's librarian can install (through nightly.link, or with
+# a GitHub token). No releases: this is a fork for testing. Built from this repository.
+# The bundle carries irate-box-bundle.json: which repository and commit it was built from.
+# Artifacts expire after 90 days, so this also runs monthly.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 5 1 * *'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to build
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: irate-box-bundle
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-node@v7
+        with:
+          # The hub runs it with Debian trixie's nodejs, which is 20.
+          node-version: 20
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - run: yarn build
+      - name: Assemble the relay with production dependencies only
+        run: |
+          mkdir -p bundle
+          cp -r dist package.json yarn.lock bundle/
+          (cd bundle && yarn install --production --frozen-lockfile --ignore-scripts --non-interactive)
+          rm -rf bundle/node_modules/.bin
+      - name: Record what was built
+        run: |
+          cat > "bundle/irate-box-bundle.json" <<JSON
+          {"app": "room", "repository": "${{ github.repository }}", "ref": "$(git rev-parse --abbrev-ref HEAD)",
+           "commit": "$(git rev-parse HEAD)", "built": "$(date -u +%Y-%m-%dT%H:%M:%SZ)", "run": ${{ github.run_id }}}
+          JSON
+          echo "SHORT=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
+          du -sh "bundle"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: irate-box-room-${{ env.SHORT }}
+          path: bundle
+          retention-days: 90
+          compression-level: 6
+          if-no-files-found: error
